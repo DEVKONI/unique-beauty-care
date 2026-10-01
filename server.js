@@ -158,6 +158,11 @@ app.get('/api/public/settings', async (_req,res) => {
   } catch (e) { res.status(500).json({error:'Unable to load settings.'}); }
 });
 
+app.get('/api/public/featured-offer', async (_req,res) => {
+  try { const r=await pool.query(`SELECT id,title,description,discount_type,discount_value,valid_from,valid_to,offer_kind,is_featured,banner_text,coupon_code FROM offers WHERE active=true AND is_featured=true AND (valid_from IS NULL OR valid_from<=CURRENT_DATE) AND (valid_to IS NULL OR valid_to>=CURRENT_DATE) ORDER BY id DESC LIMIT 1`); res.json(r.rows[0]||null); }
+  catch { res.status(500).json({error:'Unable to load featured offer.'}); }
+});
+
 app.get('/api/public/services', async (_req,res) => {
   try { const r=await pool.query('SELECT id,name,category,description,price,duration_minutes FROM services WHERE active=true ORDER BY id'); res.json(r.rows); }
   catch { res.status(500).json({error:'Unable to load services.'}); }
@@ -165,7 +170,7 @@ app.get('/api/public/services', async (_req,res) => {
 
 app.get('/api/public/offers', async (_req,res) => {
   try {
-    const r=await pool.query(`SELECT id,title,description,discount_type,discount_value,valid_from,valid_to FROM offers
+    const r=await pool.query(`SELECT id,title,description,discount_type,discount_value,valid_from,valid_to,offer_kind,is_featured,banner_text,coupon_code FROM offers
       WHERE active=true AND (valid_from IS NULL OR valid_from<=CURRENT_DATE) AND (valid_to IS NULL OR valid_to>=CURRENT_DATE) ORDER BY id DESC`);
     res.json(r.rows);
   } catch { res.status(500).json({error:'Unable to load offers.'}); }
@@ -272,20 +277,27 @@ app.patch('/api/admin/services/:id',authRequired,async(req,res)=>{try{const {nam
 app.delete('/api/admin/services/:id',authRequired,async(req,res)=>{try{await pool.query('DELETE FROM services WHERE id=$1',[req.params.id]);res.json({ok:true});}catch{res.status(400).json({error:'Could not delete service.'})}});
 app.get('/api/admin/services',authRequired,async(_req,res)=>{try{const r=await pool.query('SELECT * FROM services ORDER BY id');res.json(r.rows)}catch{res.status(500).json({error:'Unable to load services.'})}});
 
-app.get('/api/admin/offers',authRequired,async(_req,res)=>{try{const r=await pool.query('SELECT * FROM offers ORDER BY id DESC');res.json(r.rows)}catch{res.status(500).json({error:'Unable to load offers.'})}});
-app.post('/api/admin/offers',authRequired,async(req,res)=>{try{const {title,description='',discountType,discountValue,validFrom=null,validTo=null,active=true}=req.body;const r=await pool.query('INSERT INTO offers(title,description,discount_type,discount_value,valid_from,valid_to,active) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[title,description,discountType,Number(discountValue),validFrom||null,validTo||null,active]);res.status(201).json(r.rows[0]);}catch{res.status(400).json({error:'Could not create offer.'})}});
-app.patch('/api/admin/offers/:id',authRequired,async(req,res)=>{try{const {title,description,discountType,discountValue,validFrom,validTo,active}=req.body;const r=await pool.query('UPDATE offers SET title=COALESCE($1,title),description=COALESCE($2,description),discount_type=COALESCE($3,discount_type),discount_value=COALESCE($4,discount_value),valid_from=$5,valid_to=$6,active=COALESCE($7,active),updated_at=NOW() WHERE id=$8 RETURNING *',[title,description,discountType,discountValue==null?null:Number(discountValue),validFrom||null,validTo||null,active==null?null:Boolean(active),req.params.id]);if(!r.rows[0])return res.status(404).json({error:'Offer not found'});res.json(r.rows[0]);}catch{res.status(400).json({error:'Could not update offer.'})}});
+app.get('/api/admin/offers',authRequired,async(_req,res)=>{try{const r=await pool.query('SELECT * FROM offers ORDER BY is_featured DESC,id DESC');res.json(r.rows)}catch{res.status(500).json({error:'Unable to load offers.'})}});
+app.post('/api/admin/offers',authRequired,async(req,res)=>{const {title,description='',discountType,discountValue,validFrom=null,validTo=null,active=true,offerKind='Regular',isFeatured=false,bannerText='',couponCode=''}=req.body;const client=await pool.connect();try{await client.query('BEGIN');if(Boolean(isFeatured))await client.query('UPDATE offers SET is_featured=false');const r=await client.query('INSERT INTO offers(title,description,discount_type,discount_value,valid_from,valid_to,active,offer_kind,is_featured,banner_text,coupon_code) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',[title,description,discountType,Number(discountValue),validFrom||null,validTo||null,active,offerKind,Boolean(isFeatured),bannerText,couponCode]);await client.query('COMMIT');res.status(201).json(r.rows[0]);}catch(e){try{await client.query('ROLLBACK')}catch{};res.status(400).json({error:'Could not create offer.'})}finally{client.release()}});
+app.patch('/api/admin/offers/:id',authRequired,async(req,res)=>{const {title,description,discountType,discountValue,validFrom,validTo,active,offerKind,isFeatured,bannerText,couponCode}=req.body;const client=await pool.connect();try{await client.query('BEGIN');if(Boolean(isFeatured))await client.query('UPDATE offers SET is_featured=false WHERE id<>$1',[req.params.id]);const r=await client.query('UPDATE offers SET title=COALESCE($1,title),description=COALESCE($2,description),discount_type=COALESCE($3,discount_type),discount_value=COALESCE($4,discount_value),valid_from=$5,valid_to=$6,active=COALESCE($7,active),offer_kind=COALESCE($8,offer_kind),is_featured=COALESCE($9,is_featured),banner_text=COALESCE($10,banner_text),coupon_code=COALESCE($11,coupon_code),updated_at=NOW() WHERE id=$12 RETURNING *',[title,description,discountType,discountValue==null?null:Number(discountValue),validFrom||null,validTo||null,active==null?null:Boolean(active),offerKind,isFeatured==null?null:Boolean(isFeatured),bannerText,couponCode,req.params.id]);if(!r.rows[0]){await client.query('ROLLBACK');return res.status(404).json({error:'Offer not found'})}await client.query('COMMIT');res.json(r.rows[0]);}catch(e){try{await client.query('ROLLBACK')}catch{};res.status(400).json({error:'Could not update offer.'})}finally{client.release()}});
 app.delete('/api/admin/offers/:id',authRequired,async(req,res)=>{try{await pool.query('DELETE FROM offers WHERE id=$1',[req.params.id]);res.json({ok:true});}catch{res.status(400).json({error:'Could not delete offer.'})}});
 
 app.get('/api/admin/settings',authRequired,async(_req,res)=>{try{res.json(await getSettings())}catch{res.status(500).json({error:'Unable to load settings.'})}});
 app.patch('/api/admin/settings',authRequired,async(req,res)=>{try{for(const [k,v] of Object.entries(req.body)){if(!Object.keys(defaultSettings).includes(k))continue;await pool.query('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value',[k,String(v)])}res.json(await getSettings())}catch{res.status(400).json({error:'Could not update settings.'})}});
 
-// Static public files and the private admin page.
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/admin',(_req,res)=>res.sendFile(path.join(__dirname,'public','admin.html')));
-// Express 5-safe SPA fallback; all API routes above have already been matched.
+// Serve the frontend whether the repository keeps pages in /public or at the repository root.
+// The GitHub upload used for this deployment has index.html/admin.html at the root.
+const frontendDir = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
+const indexFile = path.join(frontendDir, 'index.html');
+const adminFile = path.join(frontendDir, 'admin.html');
+const manifestFile = path.join(frontendDir, 'manifest.webmanifest');
+
+app.get('/manifest.webmanifest', (_req,res)=>res.sendFile(manifestFile));
+app.get('/admin', (_req,res)=>res.sendFile(adminFile));
+app.get('/', (_req,res)=>res.sendFile(indexFile));
+// Express 5-safe fallback for client-side hash routes and unknown non-API GETs.
 app.use((req,res,next)=>{
-  if (req.method === 'GET' && !req.path.startsWith('/api/')) return res.sendFile(path.join(__dirname,'public','index.html'));
+  if (req.method === 'GET' && !req.path.startsWith('/api/')) return res.sendFile(indexFile);
   next();
 });
 
