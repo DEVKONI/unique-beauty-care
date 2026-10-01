@@ -1,0 +1,9 @@
+{
+  "name":"Unique Beauty Care",
+  "short_name":"Unique Beauty Care",
+  "start_url":"/",
+  "display":"standalone",
+  "theme_color":"#422333",
+  "background_color":"#fff8f5",
+  "icons":[]
+}
