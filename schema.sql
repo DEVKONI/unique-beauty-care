@@ -10,7 +10,12 @@ CREATE TABLE IF NOT EXISTS services (
   description TEXT DEFAULT '',
   price NUMERIC(10,2) NOT NULL DEFAULT 0,
   duration_minutes INTEGER NOT NULL DEFAULT 60,
+  parent_service_id INTEGER REFERENCES services(id) ON DELETE SET NULL,
   active BOOLEAN NOT NULL DEFAULT TRUE,
+  offer_kind TEXT NOT NULL DEFAULT 'Regular' CHECK (offer_kind IN ('Regular','Festival')),
+  is_featured BOOLEAN NOT NULL DEFAULT FALSE,
+  banner_text TEXT DEFAULT '',
+  coupon_code TEXT DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -63,3 +68,23 @@ CREATE TABLE IF NOT EXISTS booking_items (
 CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
 CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(appointment_date);
 CREATE INDEX IF NOT EXISTS idx_booking_items_booking ON booking_items(booking_db_id);
+
+
+-- Safe migrations for existing deployments
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS offer_kind TEXT NOT NULL DEFAULT 'Regular';
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS banner_text TEXT DEFAULT '';
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS coupon_code TEXT DEFAULT '';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS parent_service_id INTEGER REFERENCES services(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_services_parent ON services(parent_service_id);
+
+CREATE TABLE IF NOT EXISTS site_images (
+  id SERIAL PRIMARY KEY,
+  placement TEXT NOT NULL,
+  title TEXT DEFAULT '',
+  mime_type TEXT NOT NULL,
+  image_data TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_site_images_placement ON site_images(placement);
