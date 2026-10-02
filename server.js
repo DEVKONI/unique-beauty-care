@@ -26,6 +26,7 @@ const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '300kb' }));
 app.use(express.urlencoded({ extended: false }));
+// The salon app is dynamic; always fetch the latest HTML/API data.
 app.use((req,res,next)=>{res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');next()});
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -243,4 +244,3 @@ app.get('/',(_req,res)=>res.sendFile(indexFile));
 app.use((req,res,next)=>{if(req.method==='GET'&&!req.path.startsWith('/api/'))return res.sendFile(indexFile);next()});
 
 initDb().then(()=>app.listen(PORT,()=>console.log(`Unique Beauty Care running on port ${PORT}`))).catch(err=>{console.error('Database initialization failed',err);process.exit(1)});
-
