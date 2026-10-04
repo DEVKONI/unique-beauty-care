@@ -64,3 +64,4 @@ async function boot(){
 }
 setInterval(async()=>{if(document.hidden||bookingDirty)return;await Promise.allSettled([loadSettings(),loadServices(),loadOffers(),loadImages()]);},20000); document.querySelectorAll('.section,.service,.offer,.panel,.ticket,.service-group').forEach(el=>el.classList.add('reveal')); const mo=new MutationObserver(()=>{document.querySelectorAll('.service,.offer,.panel,.ticket,.service-group').forEach((el,i)=>{el.classList.add('reveal'); setTimeout(()=>el.classList.add('show'),Math.min(i*45,350));});}); mo.observe(document.body,{childList:true,subtree:true}); boot().finally(()=>{ setTimeout(()=>document.getElementById('pageLoader').classList.add('hide'),350); document.querySelectorAll('.reveal').forEach((el,i)=>setTimeout(()=>el.classList.add('show'),Math.min(i*70,500))); });
 </script></body></html>
+
